@@ -14,52 +14,39 @@ class KoopmanChessEngine:
     def best_move(self, board):
         best_move = None
         best_score = float('-inf')
-
+    
         for move in board.legal_moves:
             board.push(move)
-
+    
             # Convert the board state to a board vector
             board_str = fen_to_board(board.fen())
             board_vector = board_to_vector(board_str)
-
+    
             # Convert to PyTorch tensor and encode to latent space
             board_tensor = torch.tensor(board_vector, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
                 z = self.cVAE_model.encoder(board_tensor).numpy()
-
-            print("Shape of initial_condition: ", z[0].shape)
-            print("Shape of self.modes: ", self.dmd_analyzer.modes.shape)
-
-            # Making future state predictions in the latent space
-            initial_condition_latent = z[:, :1]  # Take the first latent vector as initial condition
-            future_states_latent = self.dmd_analyzer.apply(initial_condition_latent, 10)  # Predict next 10 states
-
-            # Map future states back to original space using cVAE decoder
-            future_states_latent_tensor = torch.tensor(future_states_latent, dtype=torch.float32)
-
-            # Assuming future_states_latent_tensor is your tensor and cVAE_model.latent_dim is the expected size
-            latent_dim = self.cVAE_model.latent_dim
-            current_dim = future_states_latent_tensor.shape[1]
-
-            if current_dim < latent_dim:
-                # Calculate the number of zeros to pad
-                padding = latent_dim - current_dim
-
-                # Pad the tensor along the second dimension (columns)
-                future_states_latent_tensor = F.pad(future_states_latent_tensor, (0, padding))
-
-            # Now future_states_latent_tensor should have the correct size and you can pass it to the decoder
+    
+            # Ensure the shape of z matches the DMD modes
+            z = z.reshape(-1, self.dmd_analyzer.modes.shape[0])
+    
+            # Predict the next state in the latent space
+            z_next = self.dmd_analyzer.apply(z, 1)  # z is already a numpy array
+    
+            # Map the predicted state back to the original space
+            z_next_tensor = torch.tensor(z_next, dtype=torch.float32)
             with torch.no_grad():
-                future_states_original = self.cVAE_model.decoder(future_states_latent_tensor)
-
-            score = self.evaluate_board_state(future_states_original[0].numpy())
-
+                board_next = self.cVAE_model.decoder(z_next_tensor)
+    
+            # Evaluate the predicted state
+            score = self.evaluate_board_state(board_next.numpy().squeeze(), color=board.turn)
+    
             if score > best_score:
                 best_score = score
                 best_move = move
-
+    
             board.pop()
-
+    
         return best_move
 
     def evaluate_board_state(self, board_vector, color="white"):
@@ -72,8 +59,7 @@ class KoopmanChessEngine:
         Returns:
             _type_: _description_
         """
-        # Convert the board to a vector and tensor
-        board_vector = board_to_vector(fen_to_board(board.fen()))
+        # Convert the board to a tensor and encode to latent space
         board_tensor = torch.tensor(board_vector, dtype=torch.float32).unsqueeze(0)
 
         with torch.no_grad():
@@ -85,8 +71,9 @@ class KoopmanChessEngine:
         material_advantage = 0
         piece_values = {'p': -1, 'n': -3, 'b': -3, 'r': -5, 'q': -9, 'k': -100,
                         'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 100}
-        for piece in board.piece_map().values():
-            material_advantage += piece_values[piece.symbol()]
+        for piece in board_vector:
+            if piece != 0:
+                material_advantage += piece_values[chess.Piece(abs(piece), piece > 0).symbol()]
 
         # Mobility
         mobility = len(list(board.legal_moves))

@@ -90,3 +90,6 @@ if __name__ == "__main__":
     dmd_analyzer.save("dmd_analyzer.npz")
 
     print("Predicted future states in original space:", future_states_original)
+    print(f"Shape: {future_states_original.shape}")
+
+    print(f'Example: {future_states_original[0]}')
