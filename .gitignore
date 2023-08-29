@@ -3,6 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# pytorch and numpy
+*.pt
+*.npz
+
+# input data
+*.csv
+*.h5
+
 # C extensions
 *.so
 
