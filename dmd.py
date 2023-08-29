@@ -13,14 +13,21 @@ class DMDAnalyzer:
         """
         Fits the DMD model to the given snapshot matrix
         """
+
+        print(f"Fitting DMD model with rank {self.rank}")
+
         X = snapshot_matrix[:, :-1]
         X_prime = snapshot_matrix[:, 1:]
         
         # Determine the number of columns (features)
         n_features = X.shape[1]
+
+        print(f"Using {n_features} features")
         
         # Choose the rank based on the number of features
         self.rank = min(n_features, self.rank)
+
+        print(f"Using rank {self.rank}")
 
         # Perform SVD and DMD
         if n_features <= 30:  # Threshold for exact SVD can be adjusted

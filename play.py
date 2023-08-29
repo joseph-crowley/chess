@@ -3,6 +3,7 @@ from dmd import DMDAnalyzer
 from board_matrix import fen_to_board, board_to_vector
 
 import torch
+import torch.nn.functional as F
 import chess
 
 class KoopmanChessEngine:
@@ -26,17 +27,32 @@ class KoopmanChessEngine:
             with torch.no_grad():
                 z = self.cVAE_model.encoder(board_tensor).numpy()
 
-            # Use DMD to predict future states in latent space
-            future_states_latent = self.dmd_analyzer.apply(z[0], 1)  # Predict only the next state
+            print("Shape of initial_condition: ", z[0].shape)
+            print("Shape of self.modes: ", self.dmd_analyzer.modes.shape)
 
-            # Decode future states back to original space
+            # Making future state predictions in the latent space
+            initial_condition_latent = z[:, :1]  # Take the first latent vector as initial condition
+            future_states_latent = self.dmd_analyzer.apply(initial_condition_latent, 10)  # Predict next 10 states
+
+            # Map future states back to original space using cVAE decoder
             future_states_latent_tensor = torch.tensor(future_states_latent, dtype=torch.float32)
+
+            # Assuming future_states_latent_tensor is your tensor and cVAE_model.latent_dim is the expected size
+            latent_dim = self.cVAE_model.latent_dim
+            current_dim = future_states_latent_tensor.shape[1]
+
+            if current_dim < latent_dim:
+                # Calculate the number of zeros to pad
+                padding = latent_dim - current_dim
+
+                # Pad the tensor along the second dimension (columns)
+                future_states_latent_tensor = F.pad(future_states_latent_tensor, (0, padding))
+
+            # Now future_states_latent_tensor should have the correct size and you can pass it to the decoder
             with torch.no_grad():
                 future_states_original = self.cVAE_model.decoder(future_states_latent_tensor)
 
-            # Evaluate the future states using the simple piece-count evaluation function
-            future_state_vector = future_states_original.numpy().flatten()
-            score = self.evaluate_board_state(future_state_vector)
+            score = self.evaluate_board_state(future_states_original[0].numpy())
 
             if score > best_score:
                 best_score = score
