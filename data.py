@@ -94,3 +94,9 @@ def read_h5(hdf5_filename='solutions.h5', color=None):
                     print(f"Skipping {puzzle_id} in group {group_name}: Missing 'Sparse'")
                     continue  # Skip this puzzle and continue with the next
     return sparse_matrices
+
+if __name__ == "__main__":
+    columns = ['PuzzleId','FEN', 'Moves']
+    df = load_data('puzzles.csv')
+
+    solutions = create_solutions(df)

@@ -64,3 +64,13 @@ def solution_to_matrix_and_sparse(fen: str, moves: List[str]) -> Tuple[np.ndarra
         else:
             raise ValueError(f"Illegal move {move_uci} in position {board.fen()}")
     return board_vectors, sparse_boards
+
+    
+if __name__ == "__main__":
+    # Test the complete program with a single puzzle
+    initial_fen = "q3k1nr/1pp1nQpp/3p4/1P2p3/4P3/B1PP1b2/B5PP/5K2 b k - 0 17"
+    moves = ["e8d7", "a2e6", "d7d8", "f7f8"]
+    board_matrix = solution_to_matrix_and_sparse(initial_fen, moves)
+
+    # Output the 64 x n matrix
+    print(board_matrix)
