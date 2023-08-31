@@ -2,6 +2,12 @@ import chess
 import numpy as np
 from typing import List, Tuple
 
+piece_map = {
+    0: '.',
+    1: 'P', 2: 'N', 3: 'B', 4: 'R', 5: 'Q', 6: 'K',
+    -1: 'p', -2: 'n', -3: 'b', -4: 'r', -5: 'q', -6: 'k'
+}
+
 # Convert a 64-element board vector to a sparse representation
 def board_vector_to_sparse(board_vector: List[int]) -> List[Tuple[int, int]]:
     return [(pos, piece) for pos, piece in enumerate(board_vector) if piece != 0]
@@ -27,12 +33,19 @@ def fen_to_board(fen: str) -> str:
 
 # Convert a 64-character board string to a 64-element column vector
 def board_to_vector(board_str: str) -> List[int]:
-    piece_map = {
-        '.': 0,
-        'P': 1, 'N': 2, 'B': 3, 'R': 4, 'Q': 5, 'K': 6,
-        'p': -1, 'n': -2, 'b': -3, 'r': -4, 'q': -5, 'k': -6
-    }
     return [piece_map[symbol] for symbol in board_str]
+
+def vector_to_board(board_vector: List[int]) -> str:
+    return ''.join([piece_map[piece] for piece in board_vector])
+
+def is_valid_board(board_vector):
+    board = board_vector.reshape(-1, 8, 8)
+    valid = np.zeros(board.shape[0], dtype=np.bool)
+    for i in range(board.shape[0]):
+        board_str = vector_to_board(board[i])
+        board = chess.Board(board_str)
+        valid[i] = board.is_valid()
+    return valid
 
 # Apply a list of moves (in UCI format) to a FEN string and return the resulting FEN
 def apply_moves_to_fen(fen: str, moves: List[str]) -> str:
