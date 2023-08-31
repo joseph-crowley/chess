@@ -32,7 +32,7 @@ def chess_loss(y_true, y_pred, z_logits, z_log_var, invalid_penalty=1000, lambda
 
     return (reconstruction_loss + kl_loss + l2_reg + invalid_loss).mean()
 
-def koopman_loss(y_true, y_pred, z_t, z_next_true, z_next_pred, z_mean, z_log_var, koopman_layer, lambda1=1, lambda2=1, lambda3=1):    
+def koopman_loss(y_true, y_pred, z_t, z_next_true, z_next_pred, z_mean, z_log_var, koopman_layer, lambda1=1, lambda2=1, lambda3=1, lambda4=1000):    
     # Reconstruction loss
     reconstruction_loss = F.mse_loss(y_pred, y_true, reduction='none').sum(dim=-1)
 
@@ -44,13 +44,21 @@ def koopman_loss(y_true, y_pred, z_t, z_next_true, z_next_pred, z_mean, z_log_va
 
     # Linearity loss
     linearity_loss = F.mse_loss(z_next_pred, koopman_layer(z_next_true), reduction='mean')
+    
+    # Validity check
+    invalid_board = sum(not s for s in is_valid_board(y_pred))
 
-    return reconstruction_loss.mean() + lambda1 * kl_loss.mean() + lambda2 * future_loss + lambda3 * linearity_loss
+    return reconstruction_loss.mean() + lambda1 * kl_loss.mean() + lambda2 * future_loss + lambda3 * linearity_loss  + lambda4 * invalid_board
 
 if __name__ == "__main__":
     # Read sparse matrices and initialize DMD Analyzer
     sparse_matrices = read_h5(color="white")
-    dmd_analyzer = DMDAnalyzer(rank=32)
+
+    # Latent dimension = Rank of approximate Koopman operator
+    LATENT_DIM = 128
+
+
+    dmd_analyzer = DMDAnalyzer(rank=LATENT_DIM)
 
     # Create a list of snapshot matrices
     all_snapshot_matrices = [create_snapshot_matrix(matrix) for matrix in sparse_matrices]
@@ -72,32 +80,32 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=10**3, shuffle=True)
 
     # Initialize and train cVAE
-    cVAE_model = cVAE(hidden_dim=2**8, latent_dim=2**9, input_dim=64)
+    cVAE_model = cVAE(hidden_dim=256, latent_dim=LATENT_DIM, input_dim=64)
     optimizer = Adam(cVAE_model.parameters())
 
     n_epochs = 500
     for epoch in range(n_epochs):
         for x_t_batch, x_t_plus_1_batch in train_loader:
             optimizer.zero_grad()
-            
+
             # Encode x_t and x_{t+1} to get z_t and z_{t+1}
             z_t_logits, _ = cVAE_model.encoder(x_t_batch).chunk(2, dim=-1)
             z_t = cVAE_model.sample_from_latent(z_t_logits)
-            
+
             z_t_plus_1_logits, _ = cVAE_model.encoder(x_t_plus_1_batch).chunk(2, dim=-1)
             z_t_plus_1 = cVAE_model.sample_from_latent(z_t_plus_1_logits)
-            
+
             # Apply Koopman layer on z_t to get z'
             z_t_prime = cVAE_model.koopman_layer(z_t)
-            
+
             # Decode z' to get the predicted x_{t+1}
             x_t_plus_1_pred = cVAE_model.decoder(z_t_prime)
-            
+
             # Compute loss
             loss = koopman_loss(x_t_plus_1_batch, x_t_plus_1_pred, z_t, z_t_plus_1, z_t_prime, z_t_logits, _, cVAE_model.koopman_layer, lambda1=1, lambda2=1, lambda3=1)
             loss.backward()
             optimizer.step()
-            
+
             print(f"Epoch {epoch+1}, Loss: {loss.item()}")
 
 

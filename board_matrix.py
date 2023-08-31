@@ -31,21 +31,56 @@ def fen_to_board(fen: str) -> str:
             board_list.append(piece.symbol())
     return ''.join(board_list)
 
+# Convert a 64-character board string to FEN
+def board_str_to_fen(board_str, active_color='w', castling='KQkq', en_passant='-', halfmove=0, fullmove=1):
+    # Convert the piece placement part
+    fen = ''
+    empty = 0
+    
+    for i, char in enumerate(board_str):
+        if char == '.':
+            empty += 1
+        else:
+            if empty > 0:
+                fen += str(empty)
+                empty = 0
+            fen += char
+        
+        if (i + 1) % 8 == 0:
+            if empty > 0:
+                fen += str(empty)
+                empty = 0
+            if i < 63:
+                fen += '/'
+                
+    # Add other FEN fields
+    fen += f' {active_color} {castling} {en_passant} {halfmove} {fullmove}'
+    
+    return fen
+
 # Convert a 64-character board string to a 64-element column vector
 def board_to_vector(board_str: str) -> List[int]:
     return [piece_map[symbol] for symbol in board_str]
 
+# Convert a 64-element column vector to a 64-character board string
 def vector_to_board(board_vector: List[int]) -> str:
-    return ''.join([piece_map[piece] for piece in board_vector])
+    return ''.join([piece_map[int(piece)] for piece in board_vector])
+
+# Convert a 64-element column vector to a FEN string
+def vector_to_fen(board_vector: List[int]) -> str:
+    board_str = vector_to_board(board_vector)
+    board = chess.Board(board_str)
+    return board.fen()
 
 def is_valid_board(board_vector):
-    board = board_vector.reshape(-1, 8, 8)
-    valid = np.zeros(board.shape[0], dtype=np.bool)
-    for i in range(board.shape[0]):
-        board_str = vector_to_board(board[i])
-        board = chess.Board(board_str)
+    valid = np.zeros(board_vector.shape[0], dtype=np.bool_) 
+    for i in range(board_vector.shape[0]):
+        board_str = vector_to_board(board_vector[i])
+        board_fen = board_str_to_fen(board_str)
+        board = chess.Board(board_fen)
         valid[i] = board.is_valid()
     return valid
+
 
 # Apply a list of moves (in UCI format) to a FEN string and return the resulting FEN
 def apply_moves_to_fen(fen: str, moves: List[str]) -> str:
