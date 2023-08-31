@@ -22,6 +22,9 @@ class cVAE(nn.Module):
             self.decoder = decoder
         else:
             self.decoder = self.build_decoder()
+
+        # Adding the Koopman layer for linear dynamics in latent space
+        self.koopman_layer = nn.Linear(self.latent_dim, self.latent_dim, bias=False)
     
     # Encoder network
     def build_encoder(self):
@@ -30,7 +33,7 @@ class cVAE(nn.Module):
             nn.ReLU(),
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ReLU(),
-            nn.Linear(self.hidden_dim, 2*self.latent_dim),  # Add this line
+            nn.Linear(self.hidden_dim, 2*self.latent_dim), 
         )
     
     # Decoder network
@@ -43,18 +46,22 @@ class cVAE(nn.Module):
             nn.Linear(self.hidden_dim, self.input_dim),
         )
     
-    # Sampling from latent space
-    def sample_from_latent(self, z_mean, z_log_var):
-        epsilon = torch.randn_like(z_mean)
-        return z_mean + torch.exp(0.5 * z_log_var) * epsilon
-    
+    # Sampling from latent space using Gumbel-Softmax
+    def sample_from_latent(self, z_logits):
+        gumbel_noise = torch.nn.functional.gumbel_softmax(z_logits, tau=1, hard=False)
+        return gumbel_noise
+
     # Full forward pass
     def forward(self, inputs):
         x = self.encoder(inputs)
-        z_mean, z_log_var = x.chunk(2, dim=-1)
-        z = self.sample_from_latent(z_mean, z_log_var)
-        reconstructed = self.decoder(z)
-        return reconstructed, z_mean, z_log_var
+        z_logits, z_log_var = x.chunk(2, dim=-1)
+        z = self.sample_from_latent(z_logits)
+
+        # Apply Koopman layer to enforce linear dynamics
+        z_next = self.koopman_layer(z)
+
+        reconstructed = self.decoder(z_next)
+        return reconstructed, z_logits, z_log_var
 
     def save(self, path):
         torch.save(self.state_dict(), path)
@@ -62,11 +69,6 @@ class cVAE(nn.Module):
     def load(self, path):
         self.load_state_dict(torch.load(path))
 
-# Custom cVAE loss function
-def cVAE_loss(y_true, y_pred, z_mean, z_log_var):
-    reconstruction_loss = F.mse_loss(y_pred, y_true, reduction='none').sum(dim=-1)
-    kl_loss = -0.5 * torch.sum(1 + z_log_var - z_mean**2 - z_log_var.exp(), dim=-1)
-    return (reconstruction_loss + kl_loss).mean()
 
 if __name__ == '__main__':
     # Hyperparameters
